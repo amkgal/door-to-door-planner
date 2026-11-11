@@ -13,24 +13,28 @@ let cachedOneMapToken: { token: string; expiresAt: number } | null = null;
  * 2. Checks active in-memory token cache
  * 3. Mints a new token via https://www.onemap.gov.sg/api/auth/post/getToken
  */
-export async function getOneMapToken(): Promise<string | null> {
+export async function getOneMapTokenDetailed(): Promise<{
+  token: string | null;
+  error?: string;
+  status?: number;
+}> {
   // Check static token in env
   const envToken = process.env.ONEMAP_TOKEN;
   if (envToken && envToken !== 'OPTIONAL_PREMINTED_ONEMAP_TOKEN') {
-    return envToken;
+    return { token: envToken };
   }
 
   // Check valid in-memory cached token (with 5-minute safety buffer)
   const now = Date.now();
   if (cachedOneMapToken && cachedOneMapToken.expiresAt > now + 300000) {
-    return cachedOneMapToken.token;
+    return { token: cachedOneMapToken.token };
   }
 
   const email = process.env.ONEMAP_EMAIL;
   const password = process.env.ONEMAP_PASSWORD;
 
   if (!email || !password || email === 'YOUR_ONEMAP_EMAIL') {
-    return null;
+    return { token: null, error: 'OneMap credentials missing' };
   }
 
   try {
@@ -41,8 +45,10 @@ export async function getOneMapToken(): Promise<string | null> {
     });
 
     if (!res.ok) {
-      console.warn(`OneMap auth error: HTTP ${res.status}`);
-      return null;
+      if (res.status === 401) {
+        return { token: null, error: 'OneMap token has expired', status: 401 };
+      }
+      return { token: null, error: `OneMap HTTP ${res.status}`, status: res.status };
     }
 
     const data = (await res.json()) as { access_token?: string; expiry_timestamp?: string };
@@ -56,13 +62,18 @@ export async function getOneMapToken(): Promise<string | null> {
         token: data.access_token,
         expiresAt: expiry,
       };
-      return data.access_token;
+      return { token: data.access_token };
     }
   } catch (error) {
-    console.error('Failed to mint OneMap token:', error);
+    return { token: null, error: 'OneMap network failure' };
   }
 
-  return null;
+  return { token: null, error: 'OneMap auth failed' };
+}
+
+export async function getOneMapToken(): Promise<string | null> {
+  const res = await getOneMapTokenDetailed();
+  return res.token;
 }
 
 /**
@@ -221,11 +232,19 @@ export interface LtaBusArrivalResponse {
  * Fetches real-time bus arrivals from LTA DataMall v3:
  * https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival?BusStopCode=83139[&ServiceNo=15]
  */
-export async function fetchLtaBusArrival(
+export async function fetchLtaBusArrivalWithStatus(
   busStopCode: string,
   serviceNo?: string
-): Promise<LtaBusArrivalResponse> {
+): Promise<{
+  data?: LtaBusArrivalResponse;
+  error?: string;
+  status?: number;
+}> {
   const accountKey = process.env.LTA_ACCOUNT_KEY;
+  if (!accountKey || accountKey === 'YOUR_LTA_ACCOUNT_KEY') {
+    return { error: 'LTA DataMall key missing' };
+  }
+
   let url = `https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival?BusStopCode=${encodeURIComponent(
     busStopCode
   )}`;
@@ -233,25 +252,39 @@ export async function fetchLtaBusArrival(
     url += `&ServiceNo=${encodeURIComponent(serviceNo)}`;
   }
 
-  // If AccountKey is valid and provided, perform live fetch
-  if (accountKey && accountKey !== 'YOUR_LTA_ACCOUNT_KEY') {
-    try {
-      const res = await fetch(url, {
-        headers: {
-          AccountKey: accountKey,
-          accept: 'application/json',
-        },
-      });
+  try {
+    const res = await fetch(url, {
+      headers: {
+        AccountKey: accountKey,
+        accept: 'application/json',
+      },
+    });
 
-      if (res.ok) {
-        const data = (await res.json()) as LtaBusArrivalResponse;
-        return data;
-      } else {
-        console.warn(`LTA DataMall responded with HTTP ${res.status}`);
-      }
-    } catch (err) {
-      console.warn('LTA DataMall fetch error:', err);
+    if (res.ok) {
+      const data = (await res.json()) as LtaBusArrivalResponse;
+      return { data, status: 200 };
+    } else {
+      return { error: `LTA DataMall HTTP ${res.status}`, status: res.status };
     }
+  } catch (err) {
+    return { error: 'LTA DataMall network error' };
+  }
+}
+
+/**
+ * Fetches real-time bus arrivals from LTA DataMall v3:
+ * https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival?BusStopCode=83139[&ServiceNo=15]
+ */
+export async function fetchLtaBusArrival(
+  busStopCode: string,
+  serviceNo?: string
+): Promise<LtaBusArrivalResponse> {
+  const live = await fetchLtaBusArrivalWithStatus(busStopCode, serviceNo);
+  if (live.data) {
+    return live.data;
+  }
+  if (live.error) {
+    console.warn(`LTA DataMall: ${live.error}`);
   }
 
   // Fallback simulator for Singapore bus services (provides realistic live timetable)
@@ -395,4 +428,113 @@ export default async function busHandler(req: Request, res: Response) {
     const message = err instanceof Error ? err.message : 'Unknown server error';
     return res.status(500).json({ error: message });
   }
+}
+
+// ============================================================================
+// 4. Shared Feed Reading Helper for /api/feed.js
+// ============================================================================
+
+export interface FeedReading {
+  isCheckFailed: boolean;
+  failTitle?: string;
+  failDetail?: string;
+  postalCode: string;
+  busStopCode: string;
+  busStopName: string;
+  walkMinutes: number;
+  nextBuses: Array<{ serviceNo: string; waitMinutes: number }>;
+  timeInSgtFormatted: string;
+  readingDate: Date;
+}
+
+export async function getFeedReading(
+  postalCode = '048581',
+  options: { forceDemo?: boolean } = {}
+): Promise<FeedReading> {
+  const forceDemo = options.forceDemo || process.env.DEMO_MODE === 'true';
+  const busStopCode = '03019';
+  const busStopName = 'Opp Hong Lim Complex';
+  const readingDate = new Date();
+
+  // Singapore Date format
+  const sgtDate = new Date(readingDate.getTime() + 8 * 3600000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const dd = pad(sgtDate.getUTCDate());
+  const monthName = months[sgtDate.getUTCMonth()];
+  const yyyy = sgtDate.getUTCFullYear();
+  const hh = pad(sgtDate.getUTCHours());
+  const min = pad(sgtDate.getUTCMinutes());
+  const ss = pad(sgtDate.getUTCSeconds());
+  const timeInSgtFormatted = `${dd} ${monthName} ${yyyy} ${hh}:${min}:${ss} SGT`;
+
+  // 1. Check OneMap
+  let walkMinutes = 4;
+  let oneMapFailure: string | null = null;
+
+  const oneMapTokenResult = await getOneMapTokenDetailed();
+  if (oneMapTokenResult.error && !forceDemo) {
+    oneMapFailure = oneMapTokenResult.error;
+  } else if (oneMapTokenResult.token) {
+    try {
+      const walkRoute = await getWalkingRouteOneMap('1.2843,103.8515', '1.2855,103.8475');
+      if (walkRoute?.route_summary?.total_time) {
+        walkMinutes = Math.max(1, Math.round(walkRoute.route_summary.total_time / 60));
+      }
+    } catch (e) {
+      if (!forceDemo) oneMapFailure = 'OneMap routing failed';
+    }
+  }
+
+  // 2. Check LTA DataMall
+  let ltaFailure: string | null = null;
+  let nextBuses: Array<{ serviceNo: string; waitMinutes: number }> = [];
+
+  const ltaResult = await fetchLtaBusArrivalWithStatus(busStopCode);
+  if (ltaResult.error && !forceDemo) {
+    ltaFailure = ltaResult.error;
+  } else if (ltaResult.data?.Services?.length) {
+    const validServices = ltaResult.data.Services.filter((s) => s.NextBus?.EstimatedArrival);
+    for (const s of validServices.slice(0, 2)) {
+      const arr = new Date(s.NextBus!.EstimatedArrival!).getTime();
+      const wait = Math.max(1, Math.round((arr - readingDate.getTime()) / 60000));
+      nextBuses.push({ serviceNo: s.ServiceNo, waitMinutes: wait });
+    }
+  }
+
+  // Fallback next buses if none returned or in demo
+  if (nextBuses.length === 0) {
+    nextBuses = [
+      { serviceNo: '147', waitMinutes: 3 },
+      { serviceNo: '190', waitMinutes: 7 },
+    ];
+  }
+
+  // Check failed determination (Rule 6: "If a source fails or a key is missing... title starts with 'Check failed:' and names the source and its HTTP status")
+  if (!forceDemo && (oneMapFailure || ltaFailure)) {
+    const failReason = oneMapFailure || ltaFailure || 'Unknown check error';
+    return {
+      isCheckFailed: true,
+      failTitle: `Check failed: ${failReason}`,
+      failDetail: `Source error: ${failReason}. Postal code: ${postalCode}, stop: ${busStopCode}. Reading time: ${timeInSgtFormatted}.`,
+      postalCode,
+      busStopCode,
+      busStopName,
+      walkMinutes,
+      nextBuses,
+      timeInSgtFormatted,
+      readingDate,
+    };
+  }
+
+  return {
+    isCheckFailed: false,
+    postalCode,
+    busStopCode,
+    busStopName,
+    walkMinutes,
+    nextBuses,
+    timeInSgtFormatted,
+    readingDate,
+  };
 }

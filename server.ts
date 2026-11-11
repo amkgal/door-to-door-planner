@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import healthHandler from './api/health.ts';
 import busHandler from './api/bus.ts';
+import feedHandler from './api/feed.js';
 
 dotenv.config();
 
@@ -25,6 +26,11 @@ async function startServer() {
   app.get('/api/bus.ts', busHandler);
   app.post('/api/bus', busHandler);
   app.post('/api/bus.ts', busHandler);
+
+  // RSS 2.0 Feed for Zapier & live readers
+  app.get('/api/feed', feedHandler);
+  app.get('/api/feed.js', feedHandler);
+  app.get('/api/feed.xml', feedHandler);
 
   const isProduction = process.env.NODE_ENV === 'production';
 
