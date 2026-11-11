@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
-import { X, Play, CheckCircle2, AlertCircle, RefreshCw, Server, ExternalLink } from 'lucide-react';
+import { X, Play, CheckCircle2, AlertCircle, RefreshCw, Server } from 'lucide-react';
 
 interface ApiInspectorModalProps {
   onClose: () => void;
 }
 
 export const ApiInspectorModal: React.FC<ApiInspectorModalProps> = ({ onClose }) => {
-  const [activeTab, setActiveTab] = useState<'health' | 'lta' | 'onemap-geo' | 'onemap-route'>('health');
-  const [busStopCode, setBusStopCode] = useState('83139');
-  const [serviceNo, setServiceNo] = useState('15');
-  const [searchVal, setSearchVal] = useState('raffles place');
-  const [startCoord, setStartCoord] = useState('1.320981,103.844150');
-  const [endCoord, setEndCoord] = useState('1.326762,103.8559');
+  const [activeTab, setActiveTab] = useState<'health' | 'onemap-bus' | 'onemap-geo' | 'onemap-route'>('health');
+  const [busStopCode, setBusStopCode] = useState('75009');
+  const [serviceNo, setServiceNo] = useState('14');
+  const [searchVal, setSearchVal] = useState('048581');
+  const [startCoord, setStartCoord] = useState('1.2843,103.8515');
+  const [endCoord, setEndCoord] = useState('1.3010,103.8384');
 
   const [loading, setLoading] = useState(false);
   const [responseJson, setResponseJson] = useState<unknown | null>(null);
@@ -25,7 +25,7 @@ export const ApiInspectorModal: React.FC<ApiInspectorModalProps> = ({ onClose })
     let url = '';
     if (tab === 'health') {
       url = '/api/health';
-    } else if (tab === 'lta') {
+    } else if (tab === 'onemap-bus') {
       url = `/api/bus?action=arrival&busStopCode=${encodeURIComponent(busStopCode)}${
         serviceNo ? `&serviceNo=${encodeURIComponent(serviceNo)}` : ''
       }`;
@@ -60,10 +60,10 @@ export const ApiInspectorModal: React.FC<ApiInspectorModalProps> = ({ onClose })
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Live Data Mall & OneMap API Explorer
+                OneMap Transit API Explorer
               </h3>
               <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                Test /api/health and /api/bus endpoints directly
+                Test /api/health and /api/bus OneMap endpoints directly
               </p>
             </div>
           </div>
@@ -80,7 +80,7 @@ export const ApiInspectorModal: React.FC<ApiInspectorModalProps> = ({ onClose })
         <div className="px-5 pt-3 border-b border-slate-100 dark:border-slate-800 flex gap-2 overflow-x-auto">
           {[
             { id: 'health', label: '1. /api/health' },
-            { id: 'lta', label: '2. LTA Next Bus (v3)' },
+            { id: 'onemap-bus', label: '2. OneMap Bus Timing' },
             { id: 'onemap-geo', label: '3. OneMap Geocode' },
             { id: 'onemap-route', label: '4. OneMap Walk Route' },
           ].map((t) => (
@@ -107,7 +107,7 @@ export const ApiInspectorModal: React.FC<ApiInspectorModalProps> = ({ onClose })
           {activeTab === 'health' && (
             <div className="space-y-3">
               <p className="text-slate-600 dark:text-slate-300">
-                Pings <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">/api/health</code> to inspect server uptime and verify LTA DataMall AccountKey & OneMap token status.
+                Pings <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono">/api/health</code> to inspect server uptime and verify OneMap API token and credentials status.
               </p>
               <button
                 onClick={() => runTest('health')}
@@ -120,12 +120,12 @@ export const ApiInspectorModal: React.FC<ApiInspectorModalProps> = ({ onClose })
             </div>
           )}
 
-          {activeTab === 'lta' && (
+          {activeTab === 'onemap-bus' && (
             <div className="space-y-3">
               <div className="text-slate-500 dark:text-slate-400">
-                Calls LTA DataMall v3 BusArrival endpoint:
+                Calls OneMap transit timing &amp; arrival endpoint:
                 <div className="font-mono text-[11px] text-slate-700 dark:text-slate-300 mt-1 break-all">
-                  https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival?BusStopCode={busStopCode}&ServiceNo={serviceNo}
+                  /api/bus?action=arrival&amp;busStopCode={busStopCode}&amp;serviceNo={serviceNo}
                 </div>
               </div>
 
@@ -138,7 +138,7 @@ export const ApiInspectorModal: React.FC<ApiInspectorModalProps> = ({ onClose })
                     type="text"
                     value={busStopCode}
                     onChange={(e) => setBusStopCode(e.target.value)}
-                    placeholder="e.g. 83139"
+                    placeholder="e.g. 75009"
                     className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono"
                   />
                 </div>
@@ -150,19 +150,19 @@ export const ApiInspectorModal: React.FC<ApiInspectorModalProps> = ({ onClose })
                     type="text"
                     value={serviceNo}
                     onChange={(e) => setServiceNo(e.target.value)}
-                    placeholder="e.g. 15"
+                    placeholder="e.g. 14"
                     className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono"
                   />
                 </div>
               </div>
 
               <button
-                onClick={() => runTest('lta')}
+                onClick={() => runTest('onemap-bus')}
                 disabled={loading}
                 className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl font-medium flex items-center gap-2 hover:bg-slate-800 dark:hover:bg-slate-100 transition-all shadow-xs"
               >
                 {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                <span>Query LTA Bus Arrival</span>
+                <span>Query OneMap Bus Timing</span>
               </button>
             </div>
           )}
@@ -172,7 +172,7 @@ export const ApiInspectorModal: React.FC<ApiInspectorModalProps> = ({ onClose })
               <div className="text-slate-500 dark:text-slate-400">
                 Calls OneMap Elastic Search Geocoding:
                 <div className="font-mono text-[11px] text-slate-700 dark:text-slate-300 mt-1 break-all">
-                  https://www.onemap.gov.sg/api/common/elastic/search?searchVal={encodeURIComponent(searchVal)}&returnGeom=Y&getAddrDetails=Y&pageNum=1
+                  https://www.onemap.gov.sg/api/common/elastic/search?searchVal={encodeURIComponent(searchVal)}&amp;returnGeom=Y&amp;getAddrDetails=Y&amp;pageNum=1
                 </div>
               </div>
 
@@ -205,7 +205,7 @@ export const ApiInspectorModal: React.FC<ApiInspectorModalProps> = ({ onClose })
               <div className="text-slate-500 dark:text-slate-400">
                 Calls OneMap Routing Service (walk mode):
                 <div className="font-mono text-[11px] text-slate-700 dark:text-slate-300 mt-1 break-all">
-                  https://www.onemap.gov.sg/api/public/routingsvc/route?start={startCoord}&end={endCoord}&routeType=walk
+                  https://www.onemap.gov.sg/api/public/routingsvc/route?start={startCoord}&amp;end={endCoord}&amp;routeType=walk
                 </div>
               </div>
 

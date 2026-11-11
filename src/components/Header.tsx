@@ -79,7 +79,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={onOpenApiInspector}
-            title="Inspect Live LTA DataMall & OneMap Endpoints"
+            title="Inspect Live OneMap Transit Endpoints"
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors whitespace-nowrap"
           >
             <Server className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />

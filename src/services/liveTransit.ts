@@ -93,7 +93,7 @@ export async function fetchLiveGeocode(query: string): Promise<PostalLocation[]>
 
 /**
  * Calls live backend endpoint /api/bus?action=arrival
- * to fetch real-time bus arrivals from LTA DataMall v3.
+ * to fetch bus arrivals from OneMap transit timing.
  */
 export async function fetchLiveBusArrivals(busStopCode: string, serviceNo?: string) {
   try {
@@ -111,7 +111,7 @@ export async function fetchLiveBusArrivals(busStopCode: string, serviceNo?: stri
 
 /**
  * Calls live backend endpoint /api/bus?action=plan
- * to compute 100% dynamic door-to-door options from live APIs.
+ * to compute 100% dynamic door-to-door options from OneMap APIs.
  */
 export async function planLiveJourneyFromServer(
   originLoc: PostalLocation,
@@ -152,10 +152,10 @@ export async function planLiveJourneyFromServer(
 }
 
 /**
- * Generates 3 proposed options entirely from live data:
+ * Generates 3 proposed options entirely from OneMap live data:
  * 1. Checks live backend planning engine `/api/bus?action=plan`.
- * 2. If unavailable, dynamically queries live LTA arrivals for nearest real bus stops
- *    and calculates exact distances, walk times, wait times, and ride times without hardcoded values.
+ * 2. If unavailable, dynamically queries OneMap transit arrivals for nearest real bus stops
+ *    and calculates exact distances, walk times, wait times, and ride times.
  */
 export async function generateLiveOptions(
   originLoc: PostalLocation,
@@ -169,7 +169,7 @@ export async function generateLiveOptions(
     return serverOptions;
   }
 
-  // 2. Client-side dynamic calculation with live API arrivals
+  // 2. Client-side dynamic calculation with OneMap transit timing
   const paceSpeedMetersPerMin = pace === 'brisk' ? 95 : pace === 'relaxed' ? 58 : 75;
   const pad = (n: number) => String(n).padStart(2, '0');
   const formatClock = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -187,7 +187,7 @@ export async function generateLiveOptions(
   const destStops = findClosestBusStops(destLat, destLng, 1);
   const alightingStop = destStops[0] || candidateStops[0];
 
-  // Fetch live arrivals for candidate stops from LTA DataMall v3
+  // Fetch OneMap bus arrivals for candidate stops
   const arrivalsList = await Promise.all(
     candidateStops.map((stop) => fetchLiveBusArrivals(stop.code))
   );
