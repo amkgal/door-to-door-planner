@@ -105,3 +105,8 @@ This document compiles all user prompts and requirement specifications provided 
 
 ### Prompt 13: Time Synchronization & Prompt Compilation
 > "the time shown are not the same, so fix that. compile the prompts used and store them in /api/prompt.md"
+
+---
+
+### Prompt 14: Git Remote Synchronization
+> "git push https://<GITHUB_PERSONAL_ACCESS_TOKEN>@github.com/amkgal/door-to-door-planner.git"
