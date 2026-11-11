@@ -35,12 +35,14 @@ export interface BusArrivalInfo {
   serviceNumber: string;
   operator: string;
   themeColor: string;
-  waitMinutes: number;
-  nextArrivalClock: string;
-  subsequentArrivalMinutes: number;
+  waitMinutes: number | null;
+  nextArrivalClock: string; // e.g. "17:18" or "No timings available"
+  subsequentArrivalMinutes: number | null;
   occupancy: BusOccupancy;
   isWheelchairAccessible: boolean;
   isDoubleDecker: boolean;
+  noTimingsAvailable?: boolean;
+  timingStatusMessage?: string;
 }
 
 export interface BusJourneyDetails {
@@ -68,7 +70,7 @@ export interface DestinationWalk {
 export interface JourneyOption {
   id: string;
   label: 'Option A' | 'Option B' | 'Option C';
-  badgeTitle: string; // e.g., "Fastest Overall", "Minimal Walking", "Bus Arriving in 2m"
+  badgeTitle: string; // e.g., "Fastest Overall", "Minimal Walking", "Bus Arriving Soon"
   badgeTone: 'emerald' | 'blue' | 'amber';
   
   // 1. Walking to the bus stop
@@ -92,6 +94,22 @@ export interface JourneyOption {
   co2SavingsKg: number;
   crowdLevel: BusOccupancy;
   highlightReason: string;
+  noTimingsAvailable?: boolean;
+}
+
+export interface AlternateModeNotice {
+  title: string; // e.g., "Consider other modes of transportation"
+  reason: string;
+  recommendedMode: 'walk' | 'mrt' | 'taxi' | 'cycle';
+  recommendedModeLabel: string;
+  estimatedDurationMinutes: number;
+  directWalkDistanceMeters?: number;
+}
+
+export interface JourneyPlannerResult {
+  options: JourneyOption[];
+  hasEfficientBusRoute: boolean;
+  alternateModeNotice?: AlternateModeNotice;
 }
 
 export type WalkingPace = 'relaxed' | 'normal' | 'brisk';

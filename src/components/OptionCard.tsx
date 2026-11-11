@@ -146,7 +146,11 @@ export const OptionCard: React.FC<OptionCardProps> = ({
                 <span>Bus Waiting & Live Arrival</span>
               </div>
               <div className="text-xs font-mono font-bold tabular-nums text-amber-700 dark:text-amber-400">
-                Wait ~{option.busArrival.waitMinutes} mins at stop
+                {option.busArrival.noTimingsAvailable || option.busArrival.waitMinutes === null ? (
+                  <span className="text-amber-700 dark:text-amber-400 font-medium">no timings available</span>
+                ) : (
+                  `Wait ~${option.busArrival.waitMinutes} mins at stop`
+                )}
               </div>
             </div>
 
@@ -157,15 +161,25 @@ export const OptionCard: React.FC<OptionCardProps> = ({
                   Next bus arrives at:
                 </span>
                 <span className="font-mono text-sm font-bold tabular-nums text-slate-900 dark:text-white">
-                  {option.busArrival.nextArrivalClock}
+                  {option.busArrival.noTimingsAvailable || option.busArrival.waitMinutes === null
+                    ? 'no timings available'
+                    : option.busArrival.nextArrivalClock}
                 </span>
-                <span className="text-slate-400 dark:text-slate-500 text-xs font-mono">
-                  (~{option.busArrival.waitMinutes}m platform wait)
-                </span>
+                {option.busArrival.waitMinutes !== null && (
+                  <span className="text-slate-400 dark:text-slate-500 text-xs font-mono">
+                    (~{option.busArrival.waitMinutes}m platform wait)
+                  </span>
+                )}
               </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                Following bus: in {option.busArrival.subsequentArrivalMinutes}m
-              </div>
+              {option.busArrival.subsequentArrivalMinutes !== null ? (
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                  Following bus: in {option.busArrival.subsequentArrivalMinutes}m
+                </div>
+              ) : (
+                <div className="text-[11px] text-slate-400 dark:text-slate-500 font-sans">
+                  Timetable scheduled
+                </div>
+              )}
             </div>
 
             {/* Bus Features & Occupancy */}

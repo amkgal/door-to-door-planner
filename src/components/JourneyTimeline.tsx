@@ -9,7 +9,7 @@ interface JourneyTimelineProps {
 
 export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ option, compact = false }) => {
   const walk1 = option.walkToStop.walkMinutes;
-  const wait = option.busArrival.waitMinutes;
+  const wait = option.busArrival.waitMinutes ?? 3;
   const ride = option.busJourney.rideMinutes;
   const walk2 = option.walkToDestination.walkMinutes;
   const total = walk1 + wait + ride + walk2;
@@ -82,7 +82,9 @@ export const JourneyTimeline: React.FC<JourneyTimelineProps> = ({ option, compac
         </div>
         <div className="flex items-center gap-1.5 truncate">
           <Clock className="w-3 h-3 text-amber-500 shrink-0" />
-          <span className="truncate">Wait {wait}m</span>
+          <span className="truncate">
+            {option.busArrival.waitMinutes === null ? 'No timings' : `Wait ${option.busArrival.waitMinutes}m`}
+          </span>
         </div>
         <div className="flex items-center gap-1.5 truncate text-emerald-700 dark:text-emerald-400 font-medium">
           <Bus className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />

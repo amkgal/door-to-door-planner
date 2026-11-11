@@ -93,7 +93,9 @@ export const DecisionSummary: React.FC<DecisionSummaryProps> = ({
                       Wait at Stop:
                     </span>
                     <span className="font-mono font-semibold tabular-nums text-slate-900 dark:text-white">
-                      {opt.busArrival.waitMinutes} mins
+                      {opt.busArrival.noTimingsAvailable || opt.busArrival.waitMinutes === null
+                        ? 'no timings available'
+                        : `${opt.busArrival.waitMinutes} mins`}
                     </span>
                   </div>
 

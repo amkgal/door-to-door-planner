@@ -10,8 +10,8 @@ import { ApiInspectorModal } from './components/ApiInspectorModal';
 import { generateThreeOptions, resolvePostalLocation } from './data/mockRoutes';
 import { generateLiveOptions } from './services/liveTransit';
 import { formatSingaporeClock } from './utils/timeFormat';
-import { JourneyOption, WalkingPace, PostalLocation } from './types/transit';
-import { Compass } from 'lucide-react';
+import { JourneyOption, WalkingPace, PostalLocation, JourneyPlannerResult } from './types/transit';
+import { Compass, Footprints, Train, AlertTriangle, ArrowRight } from 'lucide-react';
 
 export default function App() {
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -25,10 +25,10 @@ export default function App() {
   const [destCode, setDestCode] = useState('238839'); // 313 Somerset Orchard
   const [resolvedOrigin, setResolvedOrigin] = useState<PostalLocation>(() => resolvePostalLocation('048581'));
   const [resolvedDest, setResolvedDest] = useState<PostalLocation>(() => resolvePostalLocation('238839'));
-  const [options, setOptions] = useState<JourneyOption[]>(() => {
-    const init = generateThreeOptions('048581', '238839', 'normal', new Date());
-    return init.options;
-  });
+  const [plannerResult, setPlannerResult] = useState<JourneyPlannerResult>(() => ({
+    options: generateThreeOptions('048581', '238839', 'normal', new Date()).options,
+    hasEfficientBusRoute: true,
+  }));
 
   const [walkingPace, setWalkingPace] = useState<WalkingPace>('normal');
   const [selectedOptionId, setSelectedOptionId] = useState<string>('option-a');
@@ -60,9 +60,12 @@ export default function App() {
   // Generate options based on live resolved origin and destination locations
   useEffect(() => {
     let active = true;
-    generateLiveOptions(resolvedOrigin, resolvedDest, walkingPace, currentTime).then((liveOpts) => {
+    generateLiveOptions(resolvedOrigin, resolvedDest, walkingPace, currentTime).then((result) => {
       if (active) {
-        setOptions(liveOpts);
+        setPlannerResult(result);
+        if (result.options && result.options.length > 0) {
+          setSelectedOptionId(result.options[0].id);
+        }
       }
     });
     return () => {
@@ -87,6 +90,10 @@ export default function App() {
     setResolvedDest(resolvePostalLocation(dest));
     setActiveView('planner');
   };
+
+  const options = plannerResult.options || [];
+  const hasEfficientBusRoute = plannerResult.hasEfficientBusRoute;
+  const alternateNotice = plannerResult.alternateModeNotice;
 
   const visibleOptions = useMemo(() => {
     if (filterPreference === 'all') return options;
@@ -137,6 +144,70 @@ export default function App() {
               setActiveView('planner');
             }}
           />
+        ) : !hasEfficientBusRoute ? (
+          /* When there are no efficient routes involving buses, show 'consider other modes of transportation' */
+          <div className="bg-white dark:bg-slate-900 border-2 border-amber-300 dark:border-amber-700/60 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
+                {alternateNotice?.recommendedMode === 'walk' ? (
+                  <Footprints className="w-6 h-6" />
+                ) : (
+                  <Train className="w-6 h-6" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 mb-2">
+                  <AlertTriangle className="w-3 h-3" />
+                  <span>Transit Advisory</span>
+                </div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
+                  {alternateNotice?.title || 'Consider other modes of transportation'}
+                </h2>
+                <p className="text-sm text-slate-600 dark:text-slate-300 mt-1.5 leading-relaxed">
+                  {alternateNotice?.reason ||
+                    'Direct walking or taking the Singapore MRT rail network is significantly faster. Boarding a bus for this route is inefficient.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Recommendation highlight banner */}
+            <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  Recommended Travel Alternative
+                </div>
+                <div className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>{alternateNotice?.recommendedModeLabel || 'Direct Walking'}</span>
+                  <span className="text-xs font-mono font-medium text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                    ~{alternateNotice?.estimatedDurationMinutes || 5} min travel time
+                  </span>
+                </div>
+                {alternateNotice?.directWalkDistanceMeters && (
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    Straightforward covered walk ({alternateNotice.directWalkDistanceMeters}m) without waiting at any bus stop platform.
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveView('schematic')}
+                  className="px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                >
+                  View Schematic Map
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectPreset('048581', '238839')}
+                  className="px-4 py-2 text-xs font-medium bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl hover:bg-slate-800 dark:hover:bg-slate-100 transition-all shadow-xs flex items-center gap-1.5"
+                >
+                  <span>Try Bus Commute (CBD → Orchard)</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
         ) : (
           <>
             {/* Decision Matrix: Which Bus Stop to Walk To? */}

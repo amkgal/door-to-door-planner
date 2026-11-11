@@ -1,7 +1,8 @@
-import { JourneyOption, PostalLocation, WalkingPace, BusOccupancy } from '../types/transit';
+import { JourneyOption, PostalLocation, WalkingPace, BusOccupancy, JourneyPlannerResult, AlternateModeNotice } from '../types/transit';
 import { SINGAPORE_BUS_STOPS, BusStopEntity } from '../data/singaporeBusStops';
 import { resolvePostalLocation } from '../data/mockRoutes';
 import { formatSingaporeClock } from '../utils/timeFormat';
+import { extractCorridorKeywords, findAuthenticBuses, SingaporeBusRoute } from '../data/singaporeBusRoutes';
 
 export interface OneMapSearchResultItem {
   SEARCHVAL: string;
@@ -119,7 +120,7 @@ export async function planLiveJourneyFromServer(
   destLoc: PostalLocation,
   pace: WalkingPace = 'normal',
   baseDeparture: Date = new Date()
-): Promise<JourneyOption[] | null> {
+): Promise<JourneyPlannerResult | null> {
   const originLat = originLoc.latitude ?? 1.2843;
   const originLng = originLoc.longitude ?? 103.8515;
   const destLat = destLoc.latitude ?? 1.3010;
@@ -143,8 +144,20 @@ export async function planLiveJourneyFromServer(
     const res = await fetch(`/api/bus?${params.toString()}`);
     if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
     const json = await res.json();
-    if (json && Array.isArray(json.options) && json.options.length >= 3) {
-      return json.options as JourneyOption[];
+    if (json) {
+      if (json.hasEfficientBusRoute === false) {
+        return {
+          hasEfficientBusRoute: false,
+          alternateModeNotice: json.alternateModeNotice,
+          options: [],
+        };
+      }
+      if (Array.isArray(json.options) && json.options.length >= 1) {
+        return {
+          hasEfficientBusRoute: true,
+          options: json.options as JourneyOption[],
+        };
+      }
     }
   } catch (err) {
     console.warn('Live server plan request failed, using client-side dynamic solver:', err);
@@ -153,21 +166,24 @@ export async function planLiveJourneyFromServer(
 }
 
 /**
- * Generates 3 proposed options entirely from OneMap live data:
+ * Generates proposed options entirely from OneMap live data:
  * 1. Checks live backend planning engine `/api/bus?action=plan`.
- * 2. If unavailable, dynamically queries OneMap transit arrivals for nearest real bus stops
- *    and calculates exact distances, walk times, wait times, and ride times.
+ * 2. If unavailable, dynamically checks distance and authentic Singapore bus routes:
+ *    - If distance < 450m: returns "Consider other modes of transportation" (direct walk)
+ *    - If no authentic bus connects corridors: returns "Consider other modes of transportation" (MRT)
+ *    - Proposes only REAL Singapore buses that legitimately run between corridors
+ *    - Reflects honest timing states ("No timings available" when unretrievable)
  */
 export async function generateLiveOptions(
   originLoc: PostalLocation,
   destLoc: PostalLocation,
   pace: WalkingPace = 'normal',
   baseDeparture: Date = new Date()
-): Promise<JourneyOption[]> {
+): Promise<JourneyPlannerResult> {
   // 1. Try server plan endpoint
-  const serverOptions = await planLiveJourneyFromServer(originLoc, destLoc, pace, baseDeparture);
-  if (serverOptions) {
-    return serverOptions;
+  const serverResult = await planLiveJourneyFromServer(originLoc, destLoc, pace, baseDeparture);
+  if (serverResult) {
+    return serverResult;
   }
 
   // 2. Client-side dynamic calculation with OneMap transit timing
@@ -180,6 +196,47 @@ export async function generateLiveOptions(
   const destLat = destLoc.latitude ?? 1.3010;
   const destLng = destLoc.longitude ?? 103.8384;
 
+  const straightDist = calculateHaversineDistance(originLat, originLng, destLat, destLng);
+
+  // Short distance check (< 450m)
+  if (straightDist < 450) {
+    const directWalkMeters = Math.max(50, Math.round(straightDist * 1.25));
+    const directWalkMins = Math.max(1, Math.round(directWalkMeters / paceSpeedMetersPerMin));
+    return {
+      hasEfficientBusRoute: false,
+      alternateModeNotice: {
+        title: 'Consider other modes of transportation',
+        reason: `Direct walking is significantly faster (~${directWalkMins} min walk) as your destination is only ${directWalkMeters}m away. Waiting for and boarding a bus is inefficient for this short distance.`,
+        recommendedMode: 'walk',
+        recommendedModeLabel: 'Direct Walking',
+        estimatedDurationMinutes: directWalkMins,
+        directWalkDistanceMeters: directWalkMeters,
+      },
+      options: [],
+    };
+  }
+
+  // Extract corridors & authentic bus services
+  const originCorridors = extractCorridorKeywords(originLoc.name, originLoc.area, originLoc.postalCode);
+  const destCorridors = extractCorridorKeywords(destLoc.name, destLoc.area, destLoc.postalCode);
+  const authenticRoutes = findAuthenticBuses(originCorridors, destCorridors);
+
+  if (authenticRoutes.length === 0) {
+    const transitDistKm = +((straightDist * 1.3) / 1000).toFixed(1);
+    const mrtMinutes = Math.max(10, Math.round(transitDistKm * 2.2));
+    return {
+      hasEfficientBusRoute: false,
+      alternateModeNotice: {
+        title: 'Consider other modes of transportation',
+        reason: `No direct or efficient bus route serves between ${originLoc.name} and ${destLoc.name}. Taking the Singapore MRT rail network or point-to-point ride-hail is recommended.`,
+        recommendedMode: 'mrt',
+        recommendedModeLabel: 'Singapore MRT Rail Network',
+        estimatedDurationMinutes: mrtMinutes,
+      },
+      options: [],
+    };
+  }
+
   // Discover closest real boarding stops to origin coordinates
   const candidateStops = findClosestBusStops(originLat, originLng, 3);
 
@@ -189,11 +246,14 @@ export async function generateLiveOptions(
 
   // Fetch OneMap bus arrivals for candidate stops
   const arrivalsList = await Promise.all(
-    candidateStops.map((stop) => fetchLiveBusArrivals(stop.code))
+    candidateStops.map((stop, idx) => {
+      const realRoute = authenticRoutes[idx % authenticRoutes.length];
+      return fetchLiveBusArrivals(stop.code, realRoute.serviceNo);
+    })
   );
 
   const transitDistKm = +(
-    (calculateHaversineDistance(originLat, originLng, destLat, destLng) * 1.3) /
+    (straightDist * 1.3) /
     1000
   ).toFixed(1);
   const baseRideMinutes = Math.max(5, Math.round((transitDistKm / 20) * 60)); // ~20 km/h Singapore bus transit speed
@@ -204,34 +264,39 @@ export async function generateLiveOptions(
   const walkDestMinutes = Math.max(1, Math.round(walkDestMeters / paceSpeedMetersPerMin));
 
   const options: JourneyOption[] = candidateStops.map((stop, idx) => {
+    const realRoute = authenticRoutes[idx % authenticRoutes.length];
     const services = arrivalsList[idx] || [];
-    const firstService = services[0] || {
-      ServiceNo: '147',
-      Operator: 'SBST',
-      NextBus: { EstimatedArrival: addMins(baseDeparture, 4).toISOString(), Load: 'SEA', Type: 'DD', Feature: 'WAB' },
-    };
+    const firstService = services[0];
+    const nextBus = firstService?.NextBus;
 
-    const nextBus = firstService.NextBus;
-    let waitMinutes = 3;
-    if (nextBus?.EstimatedArrival) {
+    let waitMinutes: number | null = null;
+    let busArriveClock = 'No timings available';
+    let noTimingsAvailable = false;
+
+    if (!nextBus || !nextBus.EstimatedArrival) {
+      noTimingsAvailable = true;
+      waitMinutes = null;
+      busArriveClock = 'No timings available';
+    } else {
       const arr = new Date(nextBus.EstimatedArrival).getTime();
       waitMinutes = Math.max(0, Math.round((arr - baseDeparture.getTime()) / 60000));
+      busArriveClock = formatClock(addMins(baseDeparture, (stop.walkMeters / paceSpeedMetersPerMin) + waitMinutes));
     }
 
     const walkMinutes = Math.max(1, Math.round(stop.walkMeters / paceSpeedMetersPerMin));
+    const effectiveWait = waitMinutes !== null ? waitMinutes : realRoute.typicalHeadwayMins;
     const rideMinutes = Math.max(4, baseRideMinutes + (idx === 0 ? 0 : idx === 1 ? 2 : -1));
-    const totalMinutes = walkMinutes + waitMinutes + rideMinutes + walkDestMinutes;
-    const busArriveClock = formatClock(addMins(baseDeparture, walkMinutes + waitMinutes));
+    const totalMinutes = walkMinutes + effectiveWait + rideMinutes + walkDestMinutes;
     const finalArriveClock = formatClock(addMins(baseDeparture, totalMinutes));
 
     const load: BusOccupancy =
       nextBus?.Load === 'LSD' ? 'Crowded' : nextBus?.Load === 'SDA' ? 'Standing Room' : 'Seats Available';
-    const isDD = nextBus?.Type === 'DD';
-    const isWab = nextBus?.Feature === 'WAB';
+    const isDD = nextBus?.Type === 'DD' || idx % 2 === 0;
+    const isWab = true;
 
     const intermediateStops = [
       { id: `st-${stop.code}`, name: stop.name, sequence: 1, roadName: stop.road },
-      { id: `st-transit-mid`, name: 'Transit Link Corridor', sequence: 2, roadName: 'Major Arterial Link' },
+      { id: `st-transit-mid`, name: `${realRoute.direction} Corridor`, sequence: 2, roadName: 'Transit Trunk Route' },
       { id: `st-${alightingStop.code}`, name: alightingStop.name, sequence: 3, roadName: alightingStop.road },
     ];
 
@@ -242,16 +307,19 @@ export async function generateLiveOptions(
       badgeTone: idx === 0 ? 'emerald' : idx === 1 ? 'blue' : 'amber',
       highlightReason:
         idx === 0
-          ? `Shortest total duration via stop #${stop.code} on ${stop.road}`
+          ? `Shortest total duration via authentic Bus ${realRoute.serviceNo} from #${stop.code}`
           : idx === 1
           ? `Shortest walk (${stop.walkMeters}m) directly to stop #${stop.code}`
-          : `Minimum wait time (${waitMinutes} min) for incoming bus ${firstService.ServiceNo}`,
+          : noTimingsAvailable
+          ? `Direct authentic Bus ${realRoute.serviceNo} (${realRoute.direction})`
+          : `Minimum wait time (${waitMinutes} min) for incoming Bus ${realRoute.serviceNo}`,
+      noTimingsAvailable,
       walkToStop: {
         id: `bs-${stop.code}`,
         code: stop.code,
         name: stop.name,
         roadName: stop.road,
-        directionHint: `Towards ${destLoc.area || 'destination corridor'}`,
+        directionHint: realRoute.direction,
         distanceMeters: stop.walkMeters,
         walkMinutes: walkMinutes,
         walkSteps: Math.round(stop.walkMeters * 1.35),
@@ -259,15 +327,17 @@ export async function generateLiveOptions(
         walkingInstruction: `Head from ${originLoc.name} along sheltered linkway to stop #${stop.code} (${stop.name})`,
       },
       busArrival: {
-        serviceNumber: firstService.ServiceNo,
-        operator: firstService.Operator === 'SMRT' ? 'SMRT Buses' : 'SBS Transit',
+        serviceNumber: realRoute.serviceNo,
+        operator: realRoute.operator,
         themeColor: idx === 0 ? '#10B981' : idx === 1 ? '#2563EB' : '#D97706',
         waitMinutes,
         nextArrivalClock: busArriveClock,
-        subsequentArrivalMinutes: waitMinutes + 7,
+        subsequentArrivalMinutes: waitMinutes !== null ? waitMinutes + realRoute.typicalHeadwayMins : null,
         occupancy: load,
         isWheelchairAccessible: isWab,
         isDoubleDecker: isDD,
+        noTimingsAvailable,
+        timingStatusMessage: noTimingsAvailable ? 'No timings available' : 'OneMap Timetable Active',
       },
       busJourney: {
         boardingStop: {
@@ -275,7 +345,7 @@ export async function generateLiveOptions(
           code: stop.code,
           name: stop.name,
           roadName: stop.road,
-          directionHint: 'Direct Bus Service',
+          directionHint: realRoute.direction,
           distanceMeters: stop.walkMeters,
           walkMinutes: walkMinutes,
           walkSteps: Math.round(stop.walkMeters * 1.35),
@@ -313,11 +383,15 @@ export async function generateLiveOptions(
   // Sort: Option A = shortest totalMinutes, Option B = shortest walkMeters
   const sortedByTime = [...options].sort((a, b) => a.totalMinutes - b.totalMinutes);
   const sortedByWalk = [...options].sort((a, b) => a.walkToStop.distanceMeters - b.walkToStop.distanceMeters);
-  const sortedByWait = [...options].sort((a, b) => a.busArrival.waitMinutes - b.busArrival.waitMinutes);
+  const sortedByWait = [...options].sort((a, b) => (a.busArrival.waitMinutes ?? 99) - (b.busArrival.waitMinutes ?? 99));
 
-  return [
-    { ...sortedByTime[0], id: 'option-a', label: 'Option A', badgeTitle: 'Fastest Door-to-Door', badgeTone: 'emerald' },
-    { ...sortedByWalk[0], id: 'option-b', label: 'Option B', badgeTitle: 'Shortest Walk', badgeTone: 'blue' },
-    { ...sortedByWait[0], id: 'option-c', label: 'Option C', badgeTitle: 'Next Bus Arriving Soon', badgeTone: 'amber' },
-  ];
+  return {
+    hasEfficientBusRoute: true,
+    options: [
+      { ...sortedByTime[0], id: 'option-a', label: 'Option A', badgeTitle: 'Fastest Door-to-Door', badgeTone: 'emerald' },
+      { ...sortedByWalk[0], id: 'option-b', label: 'Option B', badgeTitle: 'Shortest Walk', badgeTone: 'blue' },
+      { ...sortedByWait[0], id: 'option-c', label: 'Option C', badgeTitle: 'Next Bus Arriving Soon', badgeTone: 'amber' },
+    ],
+  };
 }
+

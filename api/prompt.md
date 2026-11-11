@@ -110,3 +110,10 @@ This document compiles all user prompts and requirement specifications provided 
 
 ### Prompt 14: Git Remote Synchronization
 > "git push https://<GITHUB_PERSONAL_ACCESS_TOKEN>@github.com/amkgal/door-to-door-planner.git"
+
+---
+
+### Prompt 15: Route Efficiency, Authentic Bus Services & Honest Arrival Timing
+> "when there are no efficient routes involving buses, show 'consider other modes of transportation'
+> when bus timings cannot be retrieved, show 'no timings available'
+> the buses between venues at times are fake, so show only real buses between routes."

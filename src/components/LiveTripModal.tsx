@@ -36,8 +36,11 @@ export const LiveTripModal: React.FC<LiveTripModalProps> = ({ option, onClose })
     {
       title: `Wait for Bus ${option.busArrival.serviceNumber}`,
       subtitle: `Boarding at ${option.walkToStop.name}`,
-      detail: `Next bus expected at ${option.busArrival.nextArrivalClock}. ${option.busArrival.occupancy}.`,
-      durationMins: option.busArrival.waitMinutes,
+      detail:
+        option.busArrival.noTimingsAvailable || option.busArrival.waitMinutes === null
+          ? 'Live bus arrival timing currently not available from OneMap timetable.'
+          : `Next bus expected at ${option.busArrival.nextArrivalClock}. ${option.busArrival.occupancy}.`,
+      durationMins: option.busArrival.waitMinutes ?? 4,
       icon: Clock,
       color: 'text-amber-600 dark:text-amber-400',
       bg: 'bg-amber-100 dark:bg-amber-950/40',
