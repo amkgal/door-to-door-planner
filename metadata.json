@@ -1,0 +1,6 @@
+{
+  "name": "Transịt · Door-to-Door Public Bus Planner",
+  "description": "Minimalist door-to-door transit planner comparing bus stop walking routes, bus waiting times, live arrivals, and walking legs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
