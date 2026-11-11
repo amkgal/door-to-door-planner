@@ -8,7 +8,8 @@ import { LiveTripModal } from './components/LiveTripModal';
 import { SavedHubsView } from './components/SavedHubsView';
 import { ApiInspectorModal } from './components/ApiInspectorModal';
 import { generateThreeOptions, resolvePostalLocation } from './data/mockRoutes';
-import { JourneyOption, WalkingPace } from './types/transit';
+import { generateLiveOptions } from './services/liveTransit';
+import { JourneyOption, WalkingPace, PostalLocation } from './types/transit';
 import { Compass } from 'lucide-react';
 
 export default function App() {
@@ -21,6 +22,13 @@ export default function App() {
 
   const [originCode, setOriginCode] = useState('048581'); // One Raffles Place
   const [destCode, setDestCode] = useState('238839'); // 313 Somerset Orchard
+  const [resolvedOrigin, setResolvedOrigin] = useState<PostalLocation>(() => resolvePostalLocation('048581'));
+  const [resolvedDest, setResolvedDest] = useState<PostalLocation>(() => resolvePostalLocation('238839'));
+  const [options, setOptions] = useState<JourneyOption[]>(() => {
+    const init = generateThreeOptions('048581', '238839', 'normal', new Date());
+    return init.options;
+  });
+
   const [walkingPace, setWalkingPace] = useState<WalkingPace>('normal');
   const [selectedOptionId, setSelectedOptionId] = useState<string>('option-a');
   const [activeView, setActiveView] = useState<'planner' | 'schematic' | 'saved'>('planner');
@@ -50,21 +58,34 @@ export default function App() {
     return `${h}:${m}`;
   }, [currentTime]);
 
-  // Generate 3 proposed transit options
-  const { origin, destination, options } = useMemo(() => {
-    return generateThreeOptions(originCode, destCode, walkingPace, currentTime);
-  }, [originCode, destCode, walkingPace, currentTime]);
+  // Generate options based on live resolved origin and destination locations
+  useEffect(() => {
+    let active = true;
+    generateLiveOptions(resolvedOrigin, resolvedDest, walkingPace, currentTime).then((liveOpts) => {
+      if (active) {
+        setOptions(liveOpts);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [resolvedOrigin, resolvedDest, walkingPace, currentTime]);
 
   // Handle swap
   const handleSwap = () => {
-    const temp = originCode;
+    const tempCode = originCode;
+    const tempLoc = resolvedOrigin;
     setOriginCode(destCode);
-    setDestCode(temp);
+    setResolvedOrigin(resolvedDest);
+    setDestCode(tempCode);
+    setResolvedDest(tempLoc);
   };
 
   const handleSelectPreset = (orig: string, dest: string) => {
     setOriginCode(orig);
     setDestCode(dest);
+    setResolvedOrigin(resolvePostalLocation(orig));
+    setResolvedDest(resolvePostalLocation(dest));
     setActiveView('planner');
   };
 
@@ -91,8 +112,12 @@ export default function App() {
         <RouteSearch
           originCode={originCode}
           destCode={destCode}
+          resolvedOrigin={resolvedOrigin}
+          resolvedDest={resolvedDest}
           onOriginChange={setOriginCode}
           onDestChange={setDestCode}
+          onSelectOriginLocation={setResolvedOrigin}
+          onSelectDestLocation={setResolvedDest}
           walkingPace={walkingPace}
           onWalkingPaceChange={setWalkingPace}
           onSwap={handleSwap}
@@ -104,10 +129,12 @@ export default function App() {
           <SavedHubsView
             onSelectHubAsOrigin={(code) => {
               setOriginCode(code);
+              setResolvedOrigin(resolvePostalLocation(code));
               setActiveView('planner');
             }}
             onSelectHubAsDestination={(code) => {
               setDestCode(code);
+              setResolvedDest(resolvePostalLocation(code));
               setActiveView('planner');
             }}
           />
@@ -123,8 +150,8 @@ export default function App() {
             {/* Interactive Schematic Map Section */}
             {activeView === 'schematic' ? (
               <TransitSchematicMap
-                origin={origin}
-                destination={destination}
+                origin={resolvedOrigin}
+                destination={resolvedDest}
                 options={options}
                 selectedId={selectedOptionId}
                 onSelectOption={(id) => setSelectedOptionId(id)}

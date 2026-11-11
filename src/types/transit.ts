@@ -3,7 +3,10 @@ export interface PostalLocation {
   name: string;
   area: string;
   address?: string;
+  latitude?: number;
+  longitude?: number;
   coordinates?: { x: number; y: number }; // For schematic mapping
+  isLive?: boolean;
 }
 
 export type BusOccupancy = 'Seats Available' | 'Standing Room' | 'Crowded';
