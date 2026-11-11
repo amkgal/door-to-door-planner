@@ -146,7 +146,7 @@ export const OptionCard: React.FC<OptionCardProps> = ({
                 <span>Bus Waiting & Live Arrival</span>
               </div>
               <div className="text-xs font-mono font-bold tabular-nums text-amber-700 dark:text-amber-400">
-                Wait ~{option.busArrival.waitMinutes} mins
+                Wait ~{option.busArrival.waitMinutes} mins at stop
               </div>
             </div>
 
@@ -160,7 +160,7 @@ export const OptionCard: React.FC<OptionCardProps> = ({
                   {option.busArrival.nextArrivalClock}
                 </span>
                 <span className="text-slate-400 dark:text-slate-500 text-xs font-mono">
-                  (in {option.busArrival.waitMinutes} min)
+                  (~{option.busArrival.waitMinutes}m platform wait)
                 </span>
               </div>
               <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">

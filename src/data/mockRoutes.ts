@@ -1,4 +1,5 @@
 import { JourneyOption, PostalLocation, WalkingPace } from '../types/transit';
+import { formatSingaporeClock } from '../utils/timeFormat';
 
 export const KNOWN_POSTAL_LOCATIONS: Record<string, PostalLocation> = {
   '048581': {
@@ -120,9 +121,7 @@ export function resolvePostalLocation(code: string): PostalLocation {
 }
 
 function formatClockTime(date: Date): string {
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
+  return formatSingaporeClock(date);
 }
 
 function addMinutesToDate(date: Date, minutes: number): Date {

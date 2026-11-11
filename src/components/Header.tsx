@@ -72,9 +72,9 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Zone 3: Primary Action & Utilities */}
         <div className="flex items-center gap-2.5 shrink-0">
-          <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums mr-1">
+          <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums mr-1" title="Singapore Standard Time (UTC+8)">
             <Clock className="w-3.5 h-3.5 text-slate-400" />
-            <span>{currentTimeString}</span>
+            <span>{currentTimeString} SGT</span>
           </div>
 
           <button

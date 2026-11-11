@@ -9,6 +9,7 @@ import { SavedHubsView } from './components/SavedHubsView';
 import { ApiInspectorModal } from './components/ApiInspectorModal';
 import { generateThreeOptions, resolvePostalLocation } from './data/mockRoutes';
 import { generateLiveOptions } from './services/liveTransit';
+import { formatSingaporeClock } from './utils/timeFormat';
 import { JourneyOption, WalkingPace, PostalLocation } from './types/transit';
 import { Compass } from 'lucide-react';
 
@@ -53,9 +54,7 @@ export default function App() {
   }, []);
 
   const currentTimeString = useMemo(() => {
-    const h = currentTime.getHours().toString().padStart(2, '0');
-    const m = currentTime.getMinutes().toString().padStart(2, '0');
-    return `${h}:${m}`;
+    return formatSingaporeClock(currentTime);
   }, [currentTime]);
 
   // Generate options based on live resolved origin and destination locations

@@ -544,6 +544,23 @@ export async function fetchOneMapBusArrival(busStopCode, serviceNo, baseTime = n
 // 4. End-to-End OneMap Door-to-Door Journey Planner
 // ============================================================================
 
+export function formatSingaporeClock(date = new Date()) {
+  const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Singapore',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(d);
+  } catch (e) {
+    const sgt = new Date(d.getTime() + 8 * 3600000);
+    const h = String(sgt.getUTCHours()).padStart(2, '0');
+    const m = String(sgt.getUTCMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+  }
+}
+
 /**
  * Plans a door-to-door trip using 100% OneMap APIs:
  * - Geocodes origin & destination via OneMap
@@ -569,7 +586,7 @@ export async function planLiveJourney(params) {
   const baseDep = new Date(departureTime);
   const paceSpeedMetersPerMin = pace === 'brisk' ? 95 : pace === 'relaxed' ? 58 : 75;
   const pad = (n) => String(n).padStart(2, '0');
-  const formatClock = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const formatClock = (d) => formatSingaporeClock(d);
   const addMins = (d, m) => new Date(d.getTime() + m * 60000);
 
   // 1. Geocode Origin & Destination via OneMap

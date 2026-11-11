@@ -1,6 +1,7 @@
 import { JourneyOption, PostalLocation, WalkingPace, BusOccupancy } from '../types/transit';
 import { SINGAPORE_BUS_STOPS, BusStopEntity } from '../data/singaporeBusStops';
 import { resolvePostalLocation } from '../data/mockRoutes';
+import { formatSingaporeClock } from '../utils/timeFormat';
 
 export interface OneMapSearchResultItem {
   SEARCHVAL: string;
@@ -171,8 +172,7 @@ export async function generateLiveOptions(
 
   // 2. Client-side dynamic calculation with OneMap transit timing
   const paceSpeedMetersPerMin = pace === 'brisk' ? 95 : pace === 'relaxed' ? 58 : 75;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const formatClock = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const formatClock = (d: Date) => formatSingaporeClock(d);
   const addMins = (d: Date, m: number) => new Date(d.getTime() + m * 60000);
 
   const originLat = originLoc.latitude ?? 1.2843;
