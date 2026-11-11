@@ -3,8 +3,8 @@ import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import healthHandler from './api/health.ts';
-import busHandler from './api/bus.ts';
+import healthHandler from './api/health.js';
+import busHandler from './api/bus.js';
 import feedHandler from './api/feed.js';
 
 dotenv.config();
